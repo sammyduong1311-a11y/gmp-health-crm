@@ -1,6 +1,7 @@
 // ============================================================
 // GMP Health Vietnam — Client Management System
 // File: src/App.js — Phase 4: Team Login
+//   + Edit/Delete: clients & check-in records (Sửa / Xóa)
 // ============================================================
 
 import { useState, useEffect } from "react";
@@ -342,6 +343,34 @@ function LoginScreen({ onLogin }) {
 }
 
 // ============================================================
+// ✅ NEW: CONFIRM DIALOG (used for delete confirmations)
+// ============================================================
+function ConfirmModal({ title, message, confirmLabel, danger, onConfirm, onCancel }) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, zIndex: 1000, fontFamily: "'Segoe UI', sans-serif",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#0F172A", marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, marginBottom: 22 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Hủy</button>
+          <button onClick={onConfirm} style={{ background: danger ? "#DC2626" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{confirmLabel || "Xác nhận"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 function App() {
@@ -363,6 +392,11 @@ function App() {
   const [loadingProgress, setLoadingProgress] = useState(false);
   const [showCheckInForm, setShowCheckInForm] = useState(false);
 
+  // ✅ NEW: edit/delete state
+  const [editingClientId, setEditingClientId] = useState(null);
+  const [editingCheckInId, setEditingCheckInId] = useState(null);
+  const [confirmState, setConfirmState] = useState(null); // { title, message, confirmLabel, danger, onConfirm }
+
   const [checkIn, setCheckIn] = useState({
     period: "TUẦN 1-2", weight_kg: "", waist_cm: "", hip_cm: "",
     water_litres: "", exercise_minutes: "", sleep_hours: "",
@@ -377,6 +411,21 @@ function App() {
     treatment_days: "90", target_weight: "", target_waist: "",
     products: [], notes: "",
   });
+
+  // ✅ NEW: reusable blank states for resetting forms
+  const blankForm = {
+    name: "", gender: "Nữ", nickname: "", region: "",
+    phone: "", occupation: "", birth_year: "",
+    height_cm: "", weight_kg: "", waist_cm: "", hip_cm: "",
+    cholesterol: "", ldl: "", triglyceride: "", fatty_liver_grade: "",
+    treatment_days: "90", target_weight: "", target_waist: "",
+    products: [], notes: "",
+  };
+  const blankCheckIn = {
+    period: "TUẦN 1-2", weight_kg: "", waist_cm: "", hip_cm: "",
+    water_litres: "", exercise_minutes: "", sleep_hours: "",
+    meal_compliance: "", notes: "",
+  };
 
   // ✅ NEW: Check if user is already logged in when app starts
   useEffect(() => {
@@ -438,6 +487,7 @@ function App() {
     setView("detail");
     loadProgress(client.id);
     setShowCheckInForm(false);
+    setEditingCheckInId(null);
   }
 
   function backToList() {
@@ -445,6 +495,105 @@ function App() {
     setActiveClient(null);
     setProgressRecords([]);
     setShowCheckInForm(false);
+    setEditingCheckInId(null);
+  }
+
+  // ✅ NEW: confirm-dialog helper
+  function askConfirm(opts) {
+    setConfirmState(opts);
+  }
+
+  // ✅ NEW: open the add-client form fresh (clears any edit in progress)
+  function openAddForm() {
+    if (showForm) { setShowForm(false); return; }
+    setEditingClientId(null);
+    setForm(blankForm);
+    setShowForm(true);
+  }
+
+  // ✅ NEW: load a client into the form for editing
+  function startEditClient(client) {
+    setEditingClientId(client.id);
+    setForm({
+      name: client.name || "", gender: client.gender || "Nữ", nickname: client.nickname || "",
+      region: client.region || "", phone: client.phone || "", occupation: client.occupation || "",
+      birth_year: client.birth_year != null ? String(client.birth_year) : "",
+      height_cm: client.height_cm != null ? String(client.height_cm) : "",
+      weight_kg: client.weight_kg != null ? String(client.weight_kg) : "",
+      waist_cm: client.waist_cm != null ? String(client.waist_cm) : "",
+      hip_cm: client.hip_cm != null ? String(client.hip_cm) : "",
+      cholesterol: client.cholesterol != null ? String(client.cholesterol) : "",
+      ldl: client.ldl != null ? String(client.ldl) : "",
+      triglyceride: client.triglyceride != null ? String(client.triglyceride) : "",
+      fatty_liver_grade: client.fatty_liver_grade != null ? String(client.fatty_liver_grade) : "",
+      treatment_days: client.treatment_days != null ? String(client.treatment_days) : "90",
+      target_weight: client.target_weight != null ? String(client.target_weight) : "",
+      target_waist: client.target_waist != null ? String(client.target_waist) : "",
+      products: client.products || [], notes: client.notes || "",
+    });
+    setShowForm(true);
+    setView("list");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ✅ NEW: delete a client (and its check-in records) after confirmation
+  function handleDeleteClient(client) {
+    askConfirm({
+      title: "Xóa khách hàng?",
+      message: `Bạn có chắc muốn xóa "${client.nickname || client.name}"? Tất cả dữ liệu check-in của khách này cũng sẽ bị xóa. Hành động này không thể hoàn tác.`,
+      confirmLabel: "Xóa khách hàng",
+      danger: true,
+      onConfirm: async () => {
+        await supabase.from("progress_records").delete().eq("client_id", client.id);
+        const { error } = await supabase.from("clients").delete().eq("id", client.id);
+        setConfirmState(null);
+        if (error) { alert("Lỗi khi xóa: " + error.message); return; }
+        backToList();
+        loadClients();
+      },
+    });
+  }
+
+  // ✅ NEW: open the check-in form fresh (clears any edit in progress)
+  function openCheckInForm() {
+    if (showCheckInForm) { setShowCheckInForm(false); setEditingCheckInId(null); return; }
+    setEditingCheckInId(null);
+    setCheckIn(blankCheckIn);
+    setShowCheckInForm(true);
+  }
+
+  // ✅ NEW: load a check-in record into the form for editing
+  function startEditCheckIn(record) {
+    setEditingCheckInId(record.id);
+    setCheckIn({
+      period: record.period || "TUẦN 1-2",
+      weight_kg: record.weight_kg != null ? String(record.weight_kg) : "",
+      waist_cm: record.waist_cm != null ? String(record.waist_cm) : "",
+      hip_cm: record.hip_cm != null ? String(record.hip_cm) : "",
+      water_litres: record.water_litres != null ? String(record.water_litres) : "",
+      exercise_minutes: record.exercise_minutes != null ? String(record.exercise_minutes) : "",
+      sleep_hours: record.sleep_hours != null ? String(record.sleep_hours) : "",
+      meal_compliance: record.meal_compliance || "",
+      notes: record.notes || "",
+    });
+    setShowCheckInForm(true);
+  }
+
+  // ✅ NEW: delete a check-in record after confirmation
+  function handleDeleteCheckIn(record) {
+    askConfirm({
+      title: "Xóa lần check-in?",
+      message: `Xóa dữ liệu check-in "${record.period}"? Hành động này không thể hoàn tác.`,
+      confirmLabel: "Xóa check-in",
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase.from("progress_records").delete().eq("id", record.id);
+        setConfirmState(null);
+        if (error) { alert("Lỗi khi xóa: " + error.message); return; }
+        if (editingCheckInId === record.id) { setEditingCheckInId(null); setShowCheckInForm(false); }
+        loadProgress(activeClient.id);
+      },
+    });
   }
 
   async function handleSaveCheckIn() {
@@ -453,7 +602,6 @@ function App() {
     const record = {
       client_id: activeClient.id,
       period: checkIn.period,
-      check_in_date: new Date().toISOString().split("T")[0],
       weight_kg: parseFloat(checkIn.weight_kg) || null,
       waist_cm: parseFloat(checkIn.waist_cm) || null,
       hip_cm: parseFloat(checkIn.hip_cm) || null,
@@ -463,12 +611,29 @@ function App() {
       meal_compliance: checkIn.meal_compliance || null,
       notes: checkIn.notes || null,
     };
+
+    // ✅ EDIT MODE: update the existing record (keep its date, don't touch status)
+    if (editingCheckInId) {
+      const { error } = await supabase.from("progress_records").update(record).eq("id", editingCheckInId);
+      if (error) { alert("Lỗi khi cập nhật: " + error.message); }
+      else {
+        setEditingCheckInId(null);
+        setCheckIn(blankCheckIn);
+        setShowCheckInForm(false);
+        loadProgress(activeClient.id);
+      }
+      setSaving(false);
+      return;
+    }
+
+    // ADD MODE: insert a new record
+    record.check_in_date = new Date().toISOString().split("T")[0];
     const { error } = await supabase.from("progress_records").insert([record]);
     if (error) { alert("Lỗi khi lưu: " + error.message); }
     else {
       const currentIndex = PERIODS.indexOf(checkIn.period);
       const nextPeriod = PERIODS[Math.min(currentIndex + 1, PERIODS.length - 1)];
-      setCheckIn({ period: nextPeriod, weight_kg: "", waist_cm: "", hip_cm: "", water_litres: "", exercise_minutes: "", sleep_hours: "", meal_compliance: "", notes: "" });
+      setCheckIn({ ...blankCheckIn, period: nextPeriod });
       setShowCheckInForm(false);
       loadProgress(activeClient.id);
       if (activeClient.status === "new") {
@@ -501,15 +666,32 @@ function App() {
       triglyceride: form.triglyceride ? parseFloat(form.triglyceride) : null,
       fatty_liver_grade: form.fatty_liver_grade ? parseInt(form.fatty_liver_grade) : null,
       treatment_days: parseInt(form.treatment_days) || 90,
-      target_bmi: 25,
       target_weight: form.target_weight ? parseFloat(form.target_weight) : null,
       target_waist: form.target_waist ? parseFloat(form.target_waist) : null,
-      products: form.products, status: "new", notes: form.notes || null,
+      products: form.products, notes: form.notes || null,
     };
-    const { error } = await supabase.from("clients").insert([clientData]);
+
+    // ✅ EDIT MODE: update existing client (preserve status & target_bmi), then return to detail
+    if (editingClientId) {
+      const { data, error } = await supabase
+        .from("clients").update(clientData).eq("id", editingClientId).select().single();
+      if (error) { alert("Lỗi khi cập nhật: " + error.message); }
+      else {
+        setForm(blankForm);
+        setShowForm(false);
+        setEditingClientId(null);
+        loadClients();
+        if (data) { setActiveClient(data); setView("detail"); loadProgress(data.id); }
+      }
+      setSaving(false);
+      return;
+    }
+
+    // ADD MODE: insert a new client
+    const { error } = await supabase.from("clients").insert([{ ...clientData, target_bmi: 25, status: "new" }]);
     if (error) { alert("Lỗi khi lưu: " + error.message); }
     else {
-      setForm({ name: "", gender: "Nữ", nickname: "", region: "", phone: "", occupation: "", birth_year: "", height_cm: "", weight_kg: "", waist_cm: "", hip_cm: "", cholesterol: "", ldl: "", triglyceride: "", fatty_liver_grade: "", treatment_days: "90", target_weight: "", target_waist: "", products: [], notes: "" });
+      setForm(blankForm);
       setShowForm(false);
       loadClients();
     }
@@ -570,6 +752,9 @@ function App() {
 
     return (
       <div style={{ fontFamily: "'Segoe UI', sans-serif", background: "#F0F4F8", minHeight: "100vh", color: "#1E293B" }}>
+        {confirmState && (
+          <ConfirmModal {...confirmState} onCancel={() => setConfirmState(null)} />
+        )}
         <div style={{ background: "linear-gradient(135deg, #0F766E, #14B8A6)", padding: "24px 32px", boxShadow: "0 4px 20px rgba(15,118,110,0.3)" }}>
           <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -579,11 +764,15 @@ function App() {
                 <p style={{ margin: "2px 0 0", color: "#A7F3D0", fontSize: 13 }}>{activeClient.name} • {activeClient.gender}{activeClient.birth_year && ` • ${new Date().getFullYear() - activeClient.birth_year} tuổi`}</p>
               </div>
             </div>
-            <select value={activeClient.status} onChange={(e) => updateClientStatus(e.target.value)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600, background: st.bg, color: st.color, cursor: "pointer" }}>
-              <option value="new">Khách mới</option>
-              <option value="active">Đang theo dõi</option>
-              <option value="follow-up">Cần tái khám</option>
-            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => startEditClient(activeClient)} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>✏️ Sửa</button>
+              <button onClick={() => handleDeleteClient(activeClient)} style={{ background: "rgba(239,68,68,0.92)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>🗑️ Xóa</button>
+              <select value={activeClient.status} onChange={(e) => updateClientStatus(e.target.value)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600, background: st.bg, color: st.color, cursor: "pointer" }}>
+                <option value="new">Khách mới</option>
+                <option value="active">Đang theo dõi</option>
+                <option value="follow-up">Cần tái khám</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -632,13 +821,16 @@ function App() {
           <div style={{ background: "#fff", borderRadius: 16, padding: 24, marginBottom: 20, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#0F766E" }}>📈 Theo Dõi Tiến Trình ({progressRecords.length} lần check-in)</div>
-              <button onClick={() => setShowCheckInForm(!showCheckInForm)} style={{ background: showCheckInForm ? "#EF4444" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              <button onClick={openCheckInForm} style={{ background: showCheckInForm ? "#EF4444" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 {showCheckInForm ? "✕ Đóng" : "+ Thêm Check-in"}
               </button>
             </div>
 
             {showCheckInForm && (
               <div style={{ padding: 20, background: "#F0FDFA", borderRadius: 12, marginBottom: 20, border: "2px solid #14B8A6" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#0F766E", marginBottom: 12 }}>
+                  {editingCheckInId ? "✏️ Chỉnh sửa check-in" : "➕ Check-in mới"}
+                </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
                   <div><label style={labelStyle}>Giai đoạn *</label><select value={checkIn.period} onChange={(e) => setCheckIn({ ...checkIn, period: e.target.value })} style={inputStyle}>{PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
                   <div><label style={labelStyle}>Cân nặng (kg) *</label><input type="number" step="0.1" placeholder="87.5" value={checkIn.weight_kg} onChange={(e) => setCheckIn({ ...checkIn, weight_kg: e.target.value })} style={inputStyle} /></div>
@@ -657,7 +849,7 @@ function App() {
                   </div>
                 )}
                 <button onClick={handleSaveCheckIn} disabled={saving} style={{ marginTop: 14, background: saving ? "#94A3B8" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 28px", fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-                  {saving ? "Đang lưu..." : "✓ Lưu Check-in"}
+                  {saving ? "Đang lưu..." : editingCheckInId ? "✓ Cập nhật Check-in" : "✓ Lưu Check-in"}
                 </button>
               </div>
             )}
@@ -667,23 +859,27 @@ function App() {
 
             {!loadingProgress && progressRecords.length > 0 && (
               <div>
-                <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr)", gap: 2, marginBottom: 8, fontSize: 12, fontWeight: 700, color: "#64748B", padding: "8px 12px", background: "#F1F5F9", borderRadius: 8 }}>
-                  <div>Giai đoạn</div><div>Cân nặng</div><div>Vòng bụng</div><div>Vòng hông</div><div>Tuân thủ</div>
+                <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr) 92px", gap: 2, marginBottom: 8, fontSize: 12, fontWeight: 700, color: "#64748B", padding: "8px 12px", background: "#F1F5F9", borderRadius: 8 }}>
+                  <div>Giai đoạn</div><div>Cân nặng</div><div>Vòng bụng</div><div>Vòng hông</div><div>Tuân thủ</div><div style={{ textAlign: "right" }}>Thao tác</div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr)", gap: 2, padding: "10px 12px", fontSize: 13, background: "#FFFBEB", borderRadius: 8, marginBottom: 4, borderLeft: "3px solid #F59E0B" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr) 92px", gap: 2, padding: "10px 12px", fontSize: 13, background: "#FFFBEB", borderRadius: 8, marginBottom: 4, borderLeft: "3px solid #F59E0B" }}>
                   <div style={{ fontWeight: 600, color: "#92400E" }}>Ban đầu</div>
-                  <div>{activeClient.weight_kg || "—"} kg</div><div>{activeClient.waist_cm || "—"} cm</div><div>{activeClient.hip_cm || "—"} cm</div><div>—</div>
+                  <div>{activeClient.weight_kg || "—"} kg</div><div>{activeClient.waist_cm || "—"} cm</div><div>{activeClient.hip_cm || "—"} cm</div><div>—</div><div></div>
                 </div>
                 {progressRecords.map((record, index) => {
                   const prevWeight = index === 0 ? activeClient.weight_kg : progressRecords[index - 1].weight_kg;
                   const weightDiff = record.weight_kg && prevWeight ? record.weight_kg - prevWeight : null;
                   const complianceColor = { "Tốt": "#059669", "Khá": "#D97706", "Kém": "#DC2626" };
                   return (
-                    <div key={record.id} style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr)", gap: 2, padding: "10px 12px", fontSize: 13, background: index % 2 === 0 ? "#fff" : "#F8FAFC", borderRadius: 8, marginBottom: 2, borderLeft: "3px solid #14B8A6" }}>
+                    <div key={record.id} style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr) 92px", gap: 2, padding: "10px 12px", fontSize: 13, background: index % 2 === 0 ? "#fff" : "#F8FAFC", borderRadius: 8, marginBottom: 2, borderLeft: "3px solid #14B8A6" }}>
                       <div style={{ fontWeight: 600, color: "#0F766E" }}>{record.period}</div>
                       <div>{record.weight_kg || "—"} kg {weightDiff !== null && <span style={{ fontSize: 11, marginLeft: 4, color: weightDiff <= 0 ? "#059669" : "#DC2626" }}>({weightDiff > 0 ? "+" : ""}{weightDiff.toFixed(1)})</span>}</div>
                       <div>{record.waist_cm || "—"} cm</div><div>{record.hip_cm || "—"} cm</div>
                       <div style={{ color: complianceColor[record.meal_compliance] || "#94A3B8", fontWeight: 600 }}>{record.meal_compliance || "—"}</div>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+                        <button onClick={() => startEditCheckIn(record)} title="Sửa check-in" style={{ background: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 8, padding: "4px 9px", fontSize: 13, cursor: "pointer" }}>✏️</button>
+                        <button onClick={() => handleDeleteCheckIn(record)} title="Xóa check-in" style={{ background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 8, padding: "4px 9px", fontSize: 13, cursor: "pointer" }}>🗑️</button>
+                      </div>
                     </div>
                   );
                 })}
@@ -692,11 +888,11 @@ function App() {
                   const totalWeight = latest.weight_kg && activeClient.weight_kg ? (latest.weight_kg - activeClient.weight_kg).toFixed(1) : null;
                   const totalWaist = latest.waist_cm && activeClient.waist_cm ? (latest.waist_cm - activeClient.waist_cm).toFixed(1) : null;
                   return (
-                    <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr)", gap: 2, padding: "12px 12px", fontSize: 13, fontWeight: 700, background: "#F0FDFA", borderRadius: 8, marginTop: 4, borderLeft: "3px solid #0F766E" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "120px repeat(4, 1fr) 92px", gap: 2, padding: "12px 12px", fontSize: 13, fontWeight: 700, background: "#F0FDFA", borderRadius: 8, marginTop: 4, borderLeft: "3px solid #0F766E" }}>
                       <div style={{ color: "#0F766E" }}>TỔNG KẾT</div>
                       <div style={{ color: totalWeight <= 0 ? "#059669" : "#DC2626" }}>{totalWeight !== null ? `${totalWeight > 0 ? "+" : ""}${totalWeight} kg` : "—"}</div>
                       <div style={{ color: totalWaist <= 0 ? "#059669" : "#DC2626" }}>{totalWaist !== null ? `${totalWaist > 0 ? "+" : ""}${totalWaist} cm` : "—"}</div>
-                      <div>—</div><div>—</div>
+                      <div>—</div><div>—</div><div></div>
                     </div>
                   );
                 })()}
@@ -729,6 +925,9 @@ function App() {
   // ============================================================
   return (
     <div style={{ fontFamily: "'Segoe UI', sans-serif", background: "#F0F4F8", minHeight: "100vh", color: "#1E293B" }}>
+      {confirmState && (
+        <ConfirmModal {...confirmState} onCancel={() => setConfirmState(null)} />
+      )}
       <div style={{ background: "linear-gradient(135deg, #0F766E, #14B8A6)", padding: "24px 32px", boxShadow: "0 4px 20px rgba(15,118,110,0.3)" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -739,7 +938,7 @@ function App() {
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setShowForm(!showForm)} style={{ background: "#fff", color: "#0F766E", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
+            <button onClick={openAddForm} style={{ background: "#fff", color: "#0F766E", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
               {showForm ? "✕ Đóng" : "+ Thêm Khách Hàng"}
             </button>
             {/* ✅ NEW: Logout button */}
@@ -770,7 +969,7 @@ function App() {
         {/* Add client form */}
         {showForm && (
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, marginBottom: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", border: "2px solid #14B8A6" }}>
-            <h3 style={{ margin: "0 0 20px", fontSize: 20, color: "#0F766E" }}>Thêm Khách Hàng Mới</h3>
+            <h3 style={{ margin: "0 0 20px", fontSize: 20, color: "#0F766E" }}>{editingClientId ? "Chỉnh Sửa Khách Hàng" : "Thêm Khách Hàng Mới"}</h3>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#0F766E", marginBottom: 12, borderBottom: "2px solid #D1FAE5", paddingBottom: 6 }}>👤 Thông Tin Cá Nhân</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -835,9 +1034,16 @@ function App() {
               <div style={{ fontSize: 14, fontWeight: 700, color: "#0F766E", marginBottom: 12, borderBottom: "2px solid #D1FAE5", paddingBottom: 6 }}>📝 Ghi Chú</div>
               <textarea placeholder="Ghi chú tư vấn..." value={form.notes} onChange={(e) => setField("notes", e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} />
             </div>
-            <button onClick={handleSaveClient} disabled={saving} style={{ background: saving ? "#94A3B8" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 32px", fontSize: 15, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-              {saving ? "Đang lưu..." : "✓ Lưu Khách Hàng"}
-            </button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={handleSaveClient} disabled={saving} style={{ background: saving ? "#94A3B8" : "linear-gradient(135deg, #0F766E, #14B8A6)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 32px", fontSize: 15, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
+                {saving ? "Đang lưu..." : editingClientId ? "✓ Cập Nhật Khách Hàng" : "✓ Lưu Khách Hàng"}
+              </button>
+              {editingClientId && (
+                <button onClick={() => { setShowForm(false); setEditingClientId(null); setForm(blankForm); if (activeClient) setView("detail"); }} style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 10, padding: "12px 24px", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+                  Hủy
+                </button>
+              )}
+            </div>
           </div>
         )}
 
